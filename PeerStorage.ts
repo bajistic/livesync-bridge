@@ -14,10 +14,15 @@ import { scheduleTask } from "octagonal-wheels/concurrency/task";
 
 export class PeerStorage extends Peer {
     declare config: PeerStorageConf;
-
+    ignoredPatterns: string[];
 
     constructor(conf: PeerStorageConf, dispatcher: DispatchFun) {
         super(conf, dispatcher);
+        this.ignoredPatterns = conf.ignored ?? [];
+    }
+
+    isIgnored(path: string): boolean {
+        return this.ignoredPatterns.some(p => path.includes(p));
     }
 
     async delete(pathSrc: string): Promise<boolean> {
@@ -232,6 +237,8 @@ export class PeerStorage extends Peer {
 
     processFile(event: Deno.FsEvent) {
         for (const path of event.paths) {
+            // Skip temporary files, .claude directory, and ignored patterns
+            if (path.includes('.tmp.') || path.includes('/.claude/') || this.isIgnored(path)) continue;
             const key = `${event.kind}-${path}`;
             // const key = path;
             scheduleTask(key, 100, async () => {
@@ -259,21 +266,34 @@ export class PeerStorage extends Peer {
         if (this.config.scanOfflineChanges) {
             for await (const entry of walk(lP)) {
                 if (entry.isFile) {
+                    if (this.isIgnored(entry.path)) continue;
                     const ePath = this.toPosixPath(relative(this.toLocalPath("."), entry.path));
                     if (await this.isChanged(ePath)) {
                         this.debugLog(`Offline changes detected: ${ePath}`);
                         await this.dispatch(entry.path);
+                        // Throttle initial scan to avoid overwhelming CouchDB
+                        await delay(2000);
                     }
                 }
             }
         }
-        this.watcherDeno = Deno.watchFs(lP,
-            {
-                recursive: true,
-            });
+        // Retry loop to recover from transient fs watcher errors (e.g. temp files disappearing)
+        while (true) {
+            try {
+                this.watcherDeno = Deno.watchFs(lP,
+                    {
+                        recursive: true,
+                    });
 
-        for await (const event of this.watcherDeno) {
-            this.processFile(event);
+                for await (const event of this.watcherDeno) {
+                    this.processFile(event);
+                }
+            } catch (e) {
+                this.normalLog(`Watcher error (restarting in 1s): ${(e as Error).message}`);
+                try { this.watcherDeno?.close(); } catch { /* ignore */ }
+                this.watcherDeno = undefined;
+                await delay(1000);
+            }
         }
 
     }
@@ -293,6 +313,7 @@ export class PeerStorage extends Peer {
         this.watcher = chokidar.watch(lP,
             {
                 ignoreInitial: !this.config.scanOfflineChanges,
+                ignored: this.ignoredPatterns.map(p => `**/${p}/**`),
                 awaitWriteFinish: {
                     stabilityThreshold: 500,
                 },

@@ -16,6 +16,7 @@ export interface PeerStorageConf {
         args: string[]
     }
     useChokidar?: boolean;
+    ignored?: string[];
 }
 export interface PeerCouchDBConf extends DirectFileManipulatorOptions {
     type: "couchdb";

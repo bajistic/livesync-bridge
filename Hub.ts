@@ -10,9 +10,9 @@ export class Hub {
     constructor(conf: Config) {
         this.conf = conf;
     }
-    start() {
+    async start() {
         for (const p of this.peers) {
-            p.stop();
+            await p.stop();
         }
         this.peers = [];
         for (const peer of this.conf.peers) {
@@ -26,8 +26,17 @@ export class Hub {
                 throw new Error(`Unexpected Peer type: ${(peer as any)?.name} - ${(peer as any)?.type}`);
             }
         }
+        // Start CouchDB peers first and wait for initialization
         for (const p of this.peers) {
-            p.start();
+            if (p.config.type === "couchdb") {
+                await p.start();
+            }
+        }
+        // Then start storage peers
+        for (const p of this.peers) {
+            if (p.config.type === "storage") {
+                p.start();
+            }
         }
     }
 

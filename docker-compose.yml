@@ -1,8 +1,9 @@
-version: "2.1"
 services:
   bridge:
     build: .
     volumes:
-      - ./data:/app/data
+      - /home/bajistic/clawd:/app/data/ivault
       - ./dat:/app/dat
+    network_mode: host
     restart: unless-stopped
+    command: ["deno", "run", "-A", "main.ts"]
