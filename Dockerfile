@@ -1,4 +1,4 @@
-FROM denoland/deno:2.3.1
+FROM denoland/deno:2.2.12
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ VOLUME /app/data
 
 COPY . .
 
-RUN deno install --allow-import
+RUN rm -f deno.lock && deno install --allow-import
 
 CMD [ "deno", "run", "-A", "main.ts" ]
 
