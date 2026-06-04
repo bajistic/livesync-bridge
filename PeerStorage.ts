@@ -15,14 +15,39 @@ import { scheduleTask } from "octagonal-wheels/concurrency/task";
 export class PeerStorage extends Peer {
     declare config: PeerStorageConf;
     ignoredPatterns: string[];
+    allowBinarySyncPaths: string[];
+    maxBinarySyncSize: number;
 
     constructor(conf: PeerStorageConf, dispatcher: DispatchFun) {
         super(conf, dispatcher);
         this.ignoredPatterns = conf.ignored ?? [];
+        this.allowBinarySyncPaths = (conf.allowBinarySyncPaths ?? ["attachments/"]).map(p => this.normalizePath(p).replace(/^\/+/, "").replace(/\/?$/, "/"));
+        this.maxBinarySyncSize = conf.maxBinarySyncSize ?? 10 * 1024 * 1024;
     }
 
     isIgnored(path: string): boolean {
+        if (this.isAllowedBinarySyncPath(path)) return false;
         return this.ignoredPatterns.some(p => path.includes(p));
+    }
+
+    normalizePath(path: string): string {
+        return path.replaceAll("\\", "/");
+    }
+
+    toVaultRelativePath(path: string): string {
+        const normalized = this.normalizePath(path);
+        const base = this.normalizePath(this.config.baseDir || "").replace(/\/?$/, "/");
+        if (base && normalized.startsWith(base)) {
+            return normalized.substring(base.length);
+        }
+        return normalized.replace(/^\/+/, "");
+    }
+
+    isAllowedBinarySyncPath(path: string): boolean {
+        const rel = this.toVaultRelativePath(path);
+        const ext = rel.toLowerCase().split(".").pop() ?? "";
+        if (!["pdf", "png", "jpg", "jpeg", "gif", "webp", "heic"].includes(ext)) return false;
+        return this.allowBinarySyncPaths.some(prefix => rel.startsWith(prefix));
     }
 
     async delete(pathSrc: string): Promise<boolean> {
@@ -161,6 +186,14 @@ export class PeerStorage extends Peer {
     async dispatch(pathSrc: string) {
         const lP = this.toStoragePath(this.toLocalPath("."));
         const path = this.toPosixPath(relative(lP, pathSrc));
+
+        if (this.isAllowedBinarySyncPath(pathSrc)) {
+            const stat = await Deno.stat(pathSrc).catch(() => null);
+            if (stat?.isFile && stat.size > this.maxBinarySyncSize) {
+                this.sendLog(`${path} skipped; binary exceeds maxBinarySyncSize=${this.maxBinarySyncSize}`);
+                return;
+            }
+        }
 
         const data = await this.get(path);
 

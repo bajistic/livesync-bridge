@@ -17,6 +17,8 @@ export interface PeerStorageConf {
     }
     useChokidar?: boolean;
     ignored?: string[];
+    allowBinarySyncPaths?: string[];
+    maxBinarySyncSize?: number;
 }
 export interface PeerCouchDBConf extends DirectFileManipulatorOptions {
     type: "couchdb";
