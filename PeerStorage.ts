@@ -21,7 +21,7 @@ export class PeerStorage extends Peer {
     constructor(conf: PeerStorageConf, dispatcher: DispatchFun) {
         super(conf, dispatcher);
         this.ignoredPatterns = conf.ignored ?? [];
-        this.allowBinarySyncPaths = (conf.allowBinarySyncPaths ?? ["attachments/"]).map(p => this.normalizePath(p).replace(/^\/+/, "").replace(/\/?$/, "/"));
+        this.allowBinarySyncPaths = (conf.allowBinarySyncPaths ?? ["attachments/", "work/jobs/applications/", "work/jobs/father/applications/"]).map(p => this.normalizePath(p).replace(/^\/+/, "").replace(/\/?$/, "/"));
         this.maxBinarySyncSize = conf.maxBinarySyncSize ?? 10 * 1024 * 1024;
     }
 
