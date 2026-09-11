@@ -6,6 +6,11 @@ services:
       - ./dat:/app/dat
     network_mode: host
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     command: ["deno", "run", "-A", "main.ts"]
     healthcheck:
       test: ["CMD-SHELL", "deno eval 'const r = await fetch(\"http://localhost:5984/\"); Deno.exit(r.status < 500 ? 0 : 1)'"]
